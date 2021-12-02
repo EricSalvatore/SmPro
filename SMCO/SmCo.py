@@ -8,7 +8,7 @@ from my_utils import priorityQueue_torch
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-class SmCo(nn.Module):
+class SmCoModel(nn.Module):
     def __init__(self, base_encoder, input_dim = 1, feature_dim = 10, K = 128, m = 0.999, t = 0.07, mlp = False):
         """
 
@@ -27,7 +27,7 @@ class SmCo(nn.Module):
         :param mlp:judge if the fc layer is only one
         :type mlp:
         """
-        super(SmCo, self).__init__()
+        super(SmCoModel, self).__init__()
         self.K = K
         self.m = m
         self.t = t
@@ -37,13 +37,14 @@ class SmCo(nn.Module):
 
         if mlp:# 判定是否需要增加全连接层 正常需要增加有两个全连接层
             input_mlp = self.encoder_q.fc.weight.shape[1]# weight的维度为：output x input
+            print("input dimension is ", self.encoder_q.fc.weight.shape)
             self.encoder_q.fc = nn.Sequential(
                 nn.Linear(in_features=input_mlp, out_features=input_mlp),
                 nn.ReLU(inplace=True),
                 self.encoder_q.fc
 
             )
-            self.encoder_k = nn.Sequential(
+            self.encoder_k.fc = nn.Sequential(
                 nn.Linear(in_features=input_mlp, out_features=input_mlp),
                 nn.ReLU(inplace=True),
                 self.encoder_k.fc
@@ -231,7 +232,7 @@ class SmCo(nn.Module):
         weight = self._weight_method_isomap(q)
         return weight
 
-    def forward(self, img_k, img_q):
+    def forward(self, img_q, img_k):
         """
 
         :param img_k: a batch of key image
@@ -272,15 +273,15 @@ class SmCo(nn.Module):
 
 
 
-def main():
-    image = torch.randn([4, 1, 28, 28]).to(device=device)
-    # model = Encoder(_input_dim=1, _output_dim=10).to(device=device)
-    smco_model = SmCo(Encoder, input_dim=1, feature_dim=10).to(device=device)
-    logits, labels = smco_model(image, image)
-    # print(f"logits is {logits}, labels is {labels}")
-    print(f"logits shape is {logits.shape}, label shape is {labels.shape}")
-
-
-
-if __name__ == '__main__':
-    main()
+# def main():
+#     image = torch.randn([4, 1, 28, 28]).to(device=device)
+#     # model = Encoder(_input_dim=1, _output_dim=10).to(device=device)
+#     smco_model = SmCo(Encoder, input_dim=1, feature_dim=10).to(device=device)
+#     logits, labels = smco_model(image, image)
+#     # print(f"logits is {logits}, labels is {labels}")
+#     print(f"logits shape is {logits.shape}, label shape is {labels.shape}")
+#
+#
+#
+# if __name__ == '__main__':
+#     main()

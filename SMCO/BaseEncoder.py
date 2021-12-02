@@ -39,9 +39,9 @@ class Encoder(nn.Module):
     input : bs x channels x w x h
     output: bs x c
     """
-    def __init__(self, _input_dim, _output_dim, _token_ch=100, _depth=10, _patch_size=7, _dp_size=9):
+    def __init__(self, _input_dim=3, _output_dim=10, _token_ch=100, _depth=10, _patch_size=7, _dp_size=9):
         """
-        when identity an model object, you need two args to input
+        when identity an model object, you need two args to in put
 
         :param _input_dim: the input_channels
         :type _input_dim:
