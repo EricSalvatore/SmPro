@@ -10,6 +10,7 @@ import loader
 from BaseEncoder import Encoder
 from SmCo import SmCoModel
 import torch.nn.functional as F
+from utils.MeterUtils import *
 
 parse = argparse.ArgumentParser(description="this is the test")
 parse.add_argument("--batch-size", default=16, type=int,
@@ -38,44 +39,6 @@ parse.add_argument("--momentum", default=0.9, type=float,
 parse.add_argument("--weight-decay", default=1e-4, type=float,
                    help="the SGD weight decay")
 
-class AverageMeter(object):
-    def __init__(self, name, fmt = ":f"):
-        self.name = name
-        self.fmt = fmt
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.cnt = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.cnt += n
-        self.avg = self.sum//self.cnt
-
-    def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
-        return fmtstr.format(**self.__dict__)
-
-class ProgressMeter(object):
-    def __init__(self, num_batches, meters, prefix=""):
-        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
-        self.meters = meters
-        self.prefix = prefix
-
-    def display(self, batch):
-        entries = [self.prefix + self.batch_fmtstr.format(batch)]
-        entries += [str(meter) for meter in self.meters]
-        print('\t'.join(entries))
-
-    def _get_batch_fmtstr(self, num_batches):
-        num_digits = len(str(num_batches // 1))
-        fmt = '{:' + str(num_digits) + 'd}'
-        return '[' + fmt + '/' + fmt.format(num_batches) + ']'
-
 def accuracy(output, target, topk=(1,)):
     with torch.no_grad():
         maxk = max(topk)
@@ -83,10 +46,11 @@ def accuracy(output, target, topk=(1,)):
         _, pred = output.topk(maxk, 1, True, True)
         pred = pred.t()
         correct = pred.eq(target.view(1, -1).expand_as(pred))
+        print("correct is ", correct)
         res = []
         for k in topk:
             correct_k = correct[:k].contiguous().view(-1).float().sum(0, keepdim=True)
-            res.append(correct_k*100/batch_size*k)
+            res.append(correct_k.mul_(100/(batch_size)))
         return res
 
 def train(_model, _opt, _epoch, _train_loader, args):
@@ -106,24 +70,15 @@ def train(_model, _opt, _epoch, _train_loader, args):
         label = label.to(device=args.device)
         _opt.zero_grad()
         output, target = _model(img_q = images[0], img_k=images[1])
-        loss = F.cross_entropy(output, target)
-        # _, pred = output.topk(5, 1, True, True)
-        # print(pred.shape)
-        # pred = pred.t()
-        # correct = pred.eq(target.view(1, -1).expand_as(pred))
-        # print(correct)
-        # print(correct.shape)
-        # res = []
-        # correct_k = correct[:5].contiguous().view(-1).float().sum(0, keepdim=False)
-        # print("correct_k shape is ", correct_k.shape)
-        # print(correct_k)
+        loss = F.cross_entropy(output, target).cuda(0)
         acc1, acc5 = accuracy(output=output, target=target, topk=(1, 5))
         losses.update(loss.item(), images[0].size()[0])
         top1.update(acc1[0], images[0].size()[0])
         top5.update(acc5[0], images[0].size()[0])
         loss.backward()
         _opt.step()
-
+        if index%100 == 0:
+            progress.display(index)
 
 
 def main():
@@ -152,8 +107,8 @@ def main_worker(args):
     test_datasets = datasets.CIFAR10("D:\\Datasetsd\\DataSets\\CIFAR\\CIFAR10", download=True, train=False,
                                       transform=loader.TwoCropsTransform(transforms.Compose(arguments)))
     # print(train_datasets)
-    train_loader = DataLoader(dataset=train_datasets, shuffle=True, batch_size=args.batch_size)
-    test_loader = DataLoader(dataset=test_datasets, shuffle=True, batch_size=args.batch_size)
+    train_loader = DataLoader(dataset=train_datasets, shuffle=True, batch_size=args.batch_size, num_workers=2, pin_memory=True)
+    test_loader = DataLoader(dataset=test_datasets, shuffle=True, batch_size=args.batch_size, num_workers=2, pin_memory=True)
 
     model = SmCoModel(base_encoder=Encoder,
                       input_dim=args.input_dim,

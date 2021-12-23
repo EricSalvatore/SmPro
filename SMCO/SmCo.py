@@ -1,15 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from BaseEncoder import Encoder
 import einops
 import numpy as np
-from my_utils import priorityQueue_torch
+from priorityQueue import priorityQueue_torch
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class SmCoModel(nn.Module):
-    def __init__(self, base_encoder, input_dim = 1, feature_dim = 10, K = 128, m = 0.999, t = 0.07, mlp = False):
+    def __init__(self, base_encoder, input_dim = 3, feature_dim = 10, K = 128, m = 0.999, t = 0.07, mlp = False):
         """
 
         :param base_encoder: encoder obj
@@ -32,8 +31,8 @@ class SmCoModel(nn.Module):
         self.m = m
         self.t = t
 
-        self.encoder_q = base_encoder(_input_dim = input_dim, _output_dim = feature_dim)
-        self.encoder_k = base_encoder(_input_dim = input_dim, _output_dim = feature_dim)
+        self.encoder_q = base_encoder(num_classes = feature_dim)
+        self.encoder_k = base_encoder(num_classes = feature_dim)
 
         if mlp:# 判定是否需要增加全连接层 正常需要增加有两个全连接层
             input_mlp = self.encoder_q.fc.weight.shape[1]# weight的维度为：output x input
@@ -204,7 +203,7 @@ class SmCoModel(nn.Module):
         weight shape is [bs k]
         """
         # assert list(weight.shape)[0]==self.K
-
+        weight = weight.to(device)
         x_queue = einops.repeat(self.queue, "c k->n c k", n=bs)# x_queue[bs c k]
         bs_weighted_queue = torch.einsum("bck,bk->bck", [x_queue, weight])
         # shape is [bs c k]
@@ -214,13 +213,23 @@ class SmCoModel(nn.Module):
     def _dequeue_and_enqueue(self, keys):
         bs = keys.size()[0]
         ptr = int(self.queue_ptr)
+        # print(ptr)
         assert self.K % bs == 0
-        self.queue[:, ptr:ptr+bs] = keys.T
+        # print(keys.T.shape)
+        # print(self.queue[:, ptr:ptr+bs].shape)
+        # 主要是为了防止训练的batch 不完全的问题
+        if (keys.T.shape[1] == self.queue[:, ptr:ptr+bs].shape[1]):
+            self.queue[:, ptr:ptr+bs] = keys.T
+        else:
+            l = self.queue[:, ptr:ptr+bs].shape[1]
+            self.queue[:, ptr:ptr+bs] = keys.T[:, :l]
+            self.queue[:, 0:(ptr+bs)%self.K] = keys.T[:, l:]
+        # self.queue[:, ptr:ptr+bs] = keys.T
         ptr = (ptr + bs) % self.K
         self.queue_ptr[0] = ptr
 
     @torch.no_grad()
-    def _generate_weight(self, q, method="e"):
+    def _generate_weight(self, q, method="i"):
         """
         generate the weight of the queue's neg vec
         :return:weight
@@ -229,7 +238,20 @@ class SmCoModel(nn.Module):
         """
         # return torch.randn([4, self.K]).to(device=device)
         # weight = self._weight_method_euclidean(q)
-        weight = self._weight_method_isomap(q)
+        if method == "e":
+            # print("\033[31;1m{}\033[0m".format("the weight generated method you are uing is euclidean"))
+            weight = self._weight_method_euclidean(q).cuda(0)
+        elif method == "c":
+            # print("\033[31;1m{}\033[0m".format("the weight generated method you are uing is sin_similarity"))
+            weight = self._weight_method_cos_similarity(q).cuda(0)
+        elif method == "none":
+            # print("\033[31;1m{}\033[0m".format("you are not using weight generated method"))
+            weight = torch.zeros([q.size()[0], self.K])+1
+        else:
+            # print("\033[31;1m{}\033[0m".format("the weight generated method you are uing is isomap"))
+            weight = self._weight_method_isomap(q).cuda(0)
+        # weight = self._weight_method_isomap(q)
+        # print("weight is ", weight)
         return weight
 
     def forward(self, img_q, img_k):

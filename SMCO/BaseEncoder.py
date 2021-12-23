@@ -33,13 +33,13 @@ class ConvMixerLayer(nn.Module):
         output = self.layer2(x)
         return output
 
-class Encoder(nn.Module):
+class ConvMixer(nn.Module):
     """
     Build a Encoder to Transform an image to an embedding
     input : bs x channels x w x h
     output: bs x c
     """
-    def __init__(self, _input_dim=3, _output_dim=10, _token_ch=100, _depth=10, _patch_size=7, _dp_size=9):
+    def __init__(self, _input_dim=3, num_classes=10, _token_ch=100, _depth=12, _patch_size=7, _dp_size=9):
         """
         when identity an model object, you need two args to in put
 
@@ -48,9 +48,9 @@ class Encoder(nn.Module):
         :param _output_dim: the embedding features
         :type _output_dim:
         """
-        super(Encoder, self).__init__()
+        super(ConvMixer, self).__init__()
         self.input_dim = _input_dim
-        self.output_dim = _output_dim
+        self.output_dim = num_classes
         # 从这里开始替换
         self.dim = _token_ch
         self.patch_size = _patch_size

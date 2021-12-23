@@ -5,7 +5,7 @@ import random
 
 class TwoCropsTransform:
     """Take two random crops of one image as the query and key."""
-
+    # 可以测试不同的数据增强方式  可以对称也可以非对称
     def __init__(self, base_transform):
         self.base_transform = base_transform
 
